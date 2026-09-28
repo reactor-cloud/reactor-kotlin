@@ -28,7 +28,7 @@ publishing {
             pom {
                 name.set("reactor-client")
                 description.set("Reactor client for the JVM")
-                url.set("https://github.com/Reactor/reactor-kotlin")
+                url.set("https://github.com/reactor-cloud/reactor-kotlin")
                 licenses {
                     license {
                         name.set("Business Source License 1.1")
@@ -36,7 +36,7 @@ publishing {
                     }
                 }
                 scm {
-                    url.set("https://github.com/Reactor/reactor-kotlin")
+                    url.set("https://github.com/reactor-cloud/reactor-kotlin")
                 }
             }
         }
