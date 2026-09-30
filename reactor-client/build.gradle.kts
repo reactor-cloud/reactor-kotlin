@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "sl.atomicollabs.reactor"
-version = "1.26.9-beta.1"
+version = "1.26.9-beta.2"
 
 java {
     toolchain {
@@ -19,6 +19,7 @@ dependencies {
     implementation("org.json:json:20240303")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 }
 
 publishing {

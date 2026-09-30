@@ -16,10 +16,17 @@ data class User(val id: String, val email: String)
 
 data class Session(val accessToken: String, val refreshToken: String, val user: User)
 
-class ReactorClient(url: String, private val anonKey: String) {
+sealed class AuthResult {
+    data class SignedIn(val session: Session) : AuthResult()
+    data class VerificationRequired(val user: User) : AuthResult()
+    data class MfaRequired(val token: String, val factors: List<String>) : AuthResult()
+    data class EnrollmentRequired(val token: String, val factors: List<String>) : AuthResult()
+}
+
+class ReactorClient(url: String, private val anonKey: String, http: OkHttpClient? = null) {
     private val base = url.trimEnd('/')
     private var session: Session? = null
-    private val http = OkHttpClient.Builder()
+    private val http = http ?: OkHttpClient.Builder()
         .callTimeout(20, TimeUnit.SECONDS)
         .build()
 
@@ -75,10 +82,54 @@ class ReactorClient(url: String, private val anonKey: String) {
         fun getSession() = session
 
         suspend fun signUp(email: String, password: String) =
-            issue("/auth/v1/signup", JSONObject().put("email", email).put("password", password))
+            outcome("/auth/v1/signup", JSONObject().put("email", email).put("password", password))
 
         suspend fun signInWithPassword(email: String, password: String) =
-            issue("/auth/v1/token", JSONObject().put("email", email).put("password", password))
+            outcome("/auth/v1/token", JSONObject().put("email", email).put("password", password))
+
+        suspend fun verifyEmail(token: String? = null, email: String? = null, code: String? = null): Session {
+            val body = JSONObject()
+            if (token != null) body.put("token", token)
+            if (email != null) body.put("email", email)
+            if (code != null) body.put("code", code)
+            return issue("/auth/v1/verify-email", body)
+        }
+
+        suspend fun resendVerification(email: String) {
+            val (status, text) = call("/auth/v1/verify-email/send", "POST", anonKey, JSONObject().put("email", email))
+            parse(status, text)
+        }
+
+        suspend fun verifyTotp(token: String, code: String) =
+            issue("/auth/v1/factors/totp", JSONObject().put("mfa_token", token).put("code", code))
+
+        suspend fun verifyPasskey(token: String, credential: JSONObject): Session {
+            credential.put("mfa_token", token)
+            return issue("/auth/v1/factors/passkey/verify", credential)
+        }
+
+        suspend fun verifyRecovery(token: String, code: String) =
+            issue("/auth/v1/factors/recovery", JSONObject().put("mfa_token", token).put("code", code))
+
+        suspend fun enrollTotp(bearer: String? = null, code: String? = null): JSONObject {
+            val path = if (code == null) "/auth/v1/factors/totp/start" else "/auth/v1/factors/totp/confirm"
+            val body = if (code == null) JSONObject() else JSONObject().put("code", code)
+            val (status, text) = call(path, "POST", bearer ?: token(), body)
+            return parse(status, text)
+        }
+
+        suspend fun enrollPasskey(bearer: String? = null, credential: JSONObject? = null): JSONObject {
+            val path = if (credential == null) "/auth/v1/factors/passkey/register/options" else "/auth/v1/factors/passkey/register"
+            val (status, text) = call(path, "POST", bearer ?: token(), credential ?: JSONObject())
+            return parse(status, text)
+        }
+
+        fun signInWithOAuth(provider: String, redirectTo: String): String {
+            val encoded = java.net.URLEncoder.encode(redirectTo, "UTF-8")
+            return "$base/auth/v1/authorize?provider=$provider&redirect_to=$encoded"
+        }
+
+        suspend fun exchangeCode(code: String) = issue("/auth/v1/token", JSONObject().put("code", code))
 
         suspend fun getUser(): User {
             if (session == null) throw ReactorException(401, "not signed in")
@@ -99,7 +150,32 @@ class ReactorClient(url: String, private val anonKey: String) {
             session = null
         }
 
-        fun signInWithOAuth(): Nothing = throw ReactorException(0, "unsupported")
+    }
+
+    private fun factors(body: JSONObject): List<String> {
+        val list = body.optJSONArray("factors") ?: return emptyList()
+        return (0 until list.length()).map { list.getString(it) }
+    }
+
+    private suspend fun outcome(path: String, json: JSONObject): AuthResult {
+        val (status, text) = call(path, "POST", anonKey, json)
+        val body = parse(status, text)
+        if (body.has("access_token")) {
+            val next = readSession(body)
+            session = next
+            return AuthResult.SignedIn(next)
+        }
+        if (body.optBoolean("verification_required")) {
+            val user = body.getJSONObject("user")
+            return AuthResult.VerificationRequired(User(user.getString("id"), user.getString("email")))
+        }
+        if (body.optBoolean("mfa_required")) {
+            return AuthResult.MfaRequired(body.getString("mfa_token"), factors(body))
+        }
+        if (body.optBoolean("enrollment_required")) {
+            return AuthResult.EnrollmentRequired(body.getString("enroll_token"), factors(body))
+        }
+        throw ReactorException(0, "unrecognized auth response")
     }
 
     private suspend fun issue(path: String, json: JSONObject): Session {

@@ -26,7 +26,7 @@ class ContractTest {
         val password = "password123"
         val client = ReactorClient(url, anonKey)
 
-        val session = client.auth.signUp(email, password)
+        val session = (client.auth.signUp(email, password) as AuthResult.SignedIn).session
         assertEquals(email, session.user.email)
         assertEquals(email, client.auth.getUser().email)
 
@@ -55,7 +55,7 @@ class ContractTest {
         assertEquals(true, ping.getBoolean("ok"))
 
         val other = ReactorClient(url, anonKey)
-        other.auth.signUp(otherEmail, password)
+        other.auth.signUp(otherEmail, password) as AuthResult.SignedIn
         assertEquals(0, other.from("todos").select().eq("id", id).execute().length())
 
         val anon = ReactorClient(url, anonKey)
@@ -78,8 +78,8 @@ class ContractTest {
         client.auth.signOut()
         assertEquals(401, postRefresh(url, anonKey, current))
 
-        val again = client.auth.signInWithPassword(email, password)
-        assertEquals(email, again.user.email)
+        val again = client.auth.signInWithPassword(email, password) as AuthResult.SignedIn
+        assertEquals(email, again.session.user.email)
     }
 }
 
