@@ -33,10 +33,13 @@ class ReactorClient(url: String, private val anonKey: String, http: OkHttpClient
     val auth = Auth()
     val storage = Storage()
     val functions = Functions()
+    val queue = Queue()
 
     fun from(table: String) = Query(table)
 
     private fun token() = session?.accessToken ?: anonKey
+
+    private fun encode(value: String) = java.net.URLEncoder.encode(value, Charsets.UTF_8).replace("+", "%20")
 
     private suspend fun call(
         path: String,
@@ -227,6 +230,73 @@ class ReactorClient(url: String, private val anonKey: String, http: OkHttpClient
             val (status, text) = call("/fn/v1/$name", "POST", token(), body)
             return parse(status, text)
         }
+
+        suspend fun enqueue(name: String, body: JSONObject = JSONObject(), delaySecs: Int? = null, maxAttempts: Int? = null): JSONObject {
+            val json = JSONObject().put("body", body)
+            if (delaySecs != null) json.put("delay_secs", delaySecs)
+            if (maxAttempts != null) json.put("max_attempts", maxAttempts)
+            val (status, text) = call("/fn/v1/${encode(name)}/enqueue", "POST", token(), json)
+            return parse(status, text)
+        }
+
+        suspend fun task(id: String): JSONObject {
+            val (status, text) = call("/fn/v1/_admin/tasks/${encode(id)}", "GET", token())
+            return parse(status, text)
+        }
+    }
+
+    inner class Queue {
+        suspend fun list(): JSONArray = rows(call("/queue/v1/queues", "GET", token()))
+
+        suspend fun create(name: String): JSONObject {
+            val (status, text) = call("/queue/v1/queues", "POST", token(), JSONObject().put("name", name))
+            return parse(status, text)
+        }
+
+        suspend fun send(name: String, message: JSONObject, delaySecs: Int? = null): JSONObject {
+            val json = JSONObject().put("message", message)
+            if (delaySecs != null) json.put("delay_secs", delaySecs)
+            val (status, text) = call("${path(name)}/send", "POST", token(), json)
+            return parse(status, text)
+        }
+
+        suspend fun read(name: String, vtSecs: Int? = null, qty: Int? = null): JSONArray {
+            val json = JSONObject()
+            if (vtSecs != null) json.put("vt_secs", vtSecs)
+            if (qty != null) json.put("qty", qty)
+            return rows(call("${path(name)}/read", "POST", token(), json))
+        }
+
+        suspend fun peek(name: String): JSONArray = rows(call("${path(name)}/peek", "GET", token()))
+
+        suspend fun delete(name: String, msgId: Long) {
+            val (status, text) = call("${path(name)}/delete", "POST", token(), JSONObject().put("msg_id", msgId))
+            parse(status, text)
+        }
+
+        suspend fun archive(name: String, msgId: Long) {
+            val (status, text) = call("${path(name)}/archive", "POST", token(), JSONObject().put("msg_id", msgId))
+            parse(status, text)
+        }
+
+        suspend fun subscribe(name: String, functionName: String, vtSecs: Int, qty: Int, maxReads: Int) {
+            val json = JSONObject()
+                .put("function_name", functionName)
+                .put("vt_secs", vtSecs)
+                .put("qty", qty)
+                .put("max_reads", maxReads)
+            val (status, text) = call("${path(name)}/subscriptions", "POST", token(), json)
+            parse(status, text)
+        }
+
+        suspend fun unsubscribe(name: String, functionName: String) {
+            val (status, text) = call("${path(name)}/subscriptions", "DELETE", token(), JSONObject().put("function_name", functionName))
+            parse(status, text)
+        }
+
+        private fun path(name: String) = "/queue/v1/queues/${encode(name)}"
+
+        private suspend fun rows(response: Pair<Int, String>): JSONArray = parse(response.first, response.second).getJSONArray("rows")
     }
 
     inner class Query(private val table: String) {

@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "sl.atomicollabs.reactor"
-version = "1.26.9-beta.2"
+version = "1.26.10-beta8"
 
 java {
     toolchain {
