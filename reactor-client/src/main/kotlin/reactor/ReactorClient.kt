@@ -190,9 +190,24 @@ class ReactorClient(url: String, private val anonKey: String, http: OkHttpClient
 
     inner class Storage {
         fun from(bucket: String) = Bucket(bucket)
+
+        suspend fun createBucket(name: String, public: Boolean = false) {
+            val json = JSONObject().put("name", name).put("public", public)
+            val (status, text) = call("/storage/v1/bucket", "POST", token(), json)
+            parse(status, text)
+        }
     }
 
     inner class Bucket(private val bucket: String) {
+        suspend fun getPublicUrl(path: String): String {
+            val (status, text) = call("/storage/v1/bucket/${encode(bucket)}", "GET", token(), null)
+            val body = parse(status, text)
+            val root = body.optString("public_url_base", "")
+            if (!body.optBoolean("public") || root.isEmpty()) throw ReactorException(status, "bucket is not public")
+            val suffix = path.split("/").joinToString("/") { encode(it) }
+            return "$root/$suffix"
+        }
+
         suspend fun upload(path: String, bytes: ByteArray, contentType: String = "application/octet-stream") {
             val signed = presign(path, "PUT")
             withContext(Dispatchers.IO) {
