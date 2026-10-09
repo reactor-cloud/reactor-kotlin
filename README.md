@@ -4,11 +4,11 @@ Kotlin client for Reactor. Auth, a query builder, file storage, and functions fo
 
 ```kotlin
 dependencies {
-    implementation("sl.atomicollabs.reactor:reactor-client:1.26.10-beta8")
+    implementation("sl.atomicollabs.reactor:reactor-client:1.26.10-beta9")
 }
 ```
 
-[reactor.cloud](https://www.reactor.cloud) · [docs](https://github.com/reactor-cloud/reactor/blob/v1.26.10-beta8/docs/clients/kotlin.md)
+[reactor.cloud](https://www.reactor.cloud) · [docs](https://github.com/reactor-cloud/reactor/blob/v1.26.10-beta9/docs/clients/kotlin.md)
 
 ```kotlin
 val reactor = ReactorClient("https://<ref>.example.com", anonKey)
@@ -28,13 +28,13 @@ val result = reactor.functions.invoke("ping")
 | --- | --- |
 | Auth | `reactor.auth` — sign up, password, session, sign out |
 | Data | `reactor.from(table)` — select, insert, update, delete |
-| Storage | `reactor.storage.from(bucket)` — upload and download |
+| Storage | `reactor.storage.from(bucket)` — upload and download. `createBucket` and `getPublicUrl` for a public bucket |
 | Functions | `reactor.functions.invoke(name)`, `reactor.functions.enqueue(name)`, `reactor.functions.task(id)` |
 | Queue | `reactor.queue` — create, send, read, peek, subscribe. Needs the service key and `REACTOR_EXTENSIONS=queue` |
 
 The query builder covers the calls a first app needs. Use HTTP for the rest of PostgREST. `signInWithOAuth(provider, redirectTo)` returns the authorize URL. `signUp` returns `AuthResult`. Failures throw `ReactorException`.
 
-Git tag `v1.26.10-beta8`.
+Git tag `v1.26.10-beta9`.
 
 ## License
 
